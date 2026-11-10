@@ -105,10 +105,47 @@ function matchCase(matched, target) {
     return target;
 }
 
+// The cue text as the viewer sees it: every annotation swapped in place, like decorate() does on
+// the DOM (first free occurrence, case matched). Swapped parts are never matched again.
+function mixedText(text, annotations) {
+    if (typeof text !== 'string') {
+        return '';
+    }
+
+    var parts = [{ text: text, swapped: false }];
+    (Array.isArray(annotations) ? annotations : []).forEach(function(annotation) {
+        if (!annotation || typeof annotation.target !== 'string') {
+            return;
+        }
+        for (var i = 0; i < parts.length; i++) {
+            if (parts[i].swapped) {
+                continue;
+            }
+            var value = parts[i].text;
+            var match = findSource(value, annotation.source);
+            if (match === null) {
+                continue;
+            }
+            var matched = value.substr(match.index, match.length);
+            parts.splice(i, 1,
+                { text: value.slice(0, match.index), swapped: false },
+                { text: matchCase(matched, annotation.target), swapped: true },
+                { text: value.slice(match.index + match.length), swapped: false }
+            );
+            return;
+        }
+    });
+
+    return parts.map(function(part) {
+        return part.text;
+    }).join('');
+}
+
 module.exports = {
     stripTags: stripTags,
     escapeRegExp: escapeRegExp,
     buildSourceRegExp: buildSourceRegExp,
     findSource: findSource,
-    matchCase: matchCase
+    matchCase: matchCase,
+    mixedText: mixedText
 };

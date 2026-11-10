@@ -245,7 +245,7 @@ function stopPropagation(event) {
     event.stopPropagation();
 }
 
-function createWordElement(doc, annotation, text, cueText) {
+function createWordElement(doc, annotation, text, cueText, displayText) {
     var span = doc.createElement('span');
     span.className = WORD_CLASS;
     span.setAttribute('data-lingoblend-source', annotation.source);
@@ -277,6 +277,8 @@ function createWordElement(doc, annotation, text, cueText) {
             detail: {
                 annotation: Object.assign({}, annotation),
                 cueText: cueText,
+                // a linha como aparece na tela, com as palavras trocadas ("…ir às feste.")
+                displayText: displayText,
                 // idioma da legenda (track.lang, ex.: 'eng', 'pob'), para o cartão mostrar "Em inglês:" etc.
                 lang: session !== null ? session.lang : null,
                 rect: span.getBoundingClientRect()
@@ -287,7 +289,7 @@ function createWordElement(doc, annotation, text, cueText) {
     return span;
 }
 
-function replaceFirst(cueNode, annotation, cueText) {
+function replaceFirst(cueNode, annotation, cueText, displayText) {
     var textNodes = collectTextNodes(cueNode, []);
     for (var i = 0; i < textNodes.length; i++) {
         var textNode = textNodes[i];
@@ -299,7 +301,7 @@ function replaceFirst(cueNode, annotation, cueText) {
         var matchNode = textNode.splitText(match.index);
         matchNode.splitText(match.length);
         var text = lingoBlendText.matchCase(matchNode.nodeValue, annotation.target);
-        var span = createWordElement(cueNode.ownerDocument, annotation, text, cueText);
+        var span = createWordElement(cueNode.ownerDocument, annotation, text, cueText, displayText);
         matchNode.parentNode.replaceChild(span, matchNode);
         return true;
     }
@@ -320,9 +322,20 @@ function decorate(cueNode, cue) {
         return;
     }
 
+    // Quem usa o fork registra o "visto" (palavra do banco apareceu na tela) a partir deste evento.
+    events.emit('shown', {
+        requestId: requestId,
+        cueId: cueId,
+        annotations: cueAnnotations.map(function(annotation) {
+            return Object.assign({}, annotation);
+        })
+    });
+
+    var cueText = session.textById[cueId];
+    var displayText = lingoBlendText.mixedText(cueText, cueAnnotations);
     cueAnnotations.forEach(function(annotation) {
         try {
-            replaceFirst(cueNode, annotation, session.textById[cueId]);
+            replaceFirst(cueNode, annotation, cueText, displayText);
         } catch (error) {
             console.error('lingoBlend', error);
         }

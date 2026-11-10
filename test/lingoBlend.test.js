@@ -89,6 +89,23 @@ test('end-to-end string replacement', function() {
     assert.strictEqual(apply('Não, NÃO!', 'não', 'no'), '[No], NÃO!');
 });
 
+// ---- mixedText ----
+test('mixedText: the line as shown on screen, every annotation swapped', function() {
+    var cue = 'Eu não quero só ir às festas.\nFestas de novo?';
+    assert.strictEqual(
+        text.mixedText(cue, [{ source: 'festas', target: 'feste' }, { source: 'de novo', target: 'di nuovo' }]),
+        'Eu não quero só ir às feste.\nFestas di nuovo?'
+    );
+    assert.strictEqual(text.mixedText('Agora sim.', [{ source: 'Agora', target: 'adesso' }]), 'Adesso sim.');
+    // an already swapped word is not matched again by a later annotation
+    assert.strictEqual(
+        text.mixedText('o dia e o dia', [{ source: 'dia', target: 'dia giorno' }, { source: 'dia', target: 'x' }]),
+        'o dia giorno e o x'
+    );
+    assert.strictEqual(text.mixedText('sem nada', null), 'sem nada');
+    assert.strictEqual(text.mixedText('sem nada', [{ source: 'carro', target: 'macchina' }]), 'sem nada');
+});
+
 // ---- lingoBlend state machine (no DOM) ----
 function makeCues() {
     var a = { startTime: 0, endTime: 2000, text: '<i>Olá</i> mundo' };
@@ -179,6 +196,33 @@ test('provider errors -> status error; disabled does not call provider until ena
         var s = lingoBlend.getStatus();
         assert.strictEqual(s.state, 'error');
         assert.strictEqual(s.error, 'boom');
+        lingoBlend.detach(owner);
+        lingoBlend.setProvider(null);
+    });
+});
+
+test('decorate emits "shown" with the cue id, its annotations and the requestId', function() {
+    var shown = [];
+    var onShown = function(e) { shown.push(e); };
+    var owner = function() {};
+    var cuesByTime = makeCues();
+    var reqId = null;
+    lingoBlend.on('shown', onShown);
+    lingoBlend.setEnabled(true);
+    lingoBlend.setProvider(function(request) {
+        reqId = request.requestId;
+        return { c0: [{ source: 'mundo', target: 'mondo', lemma: 'mondo' }] };
+    });
+    lingoBlend.attach(owner, cuesByTime, { trackId: 't3', lang: 'pt' });
+    return tick().then(function() {
+        var fakeNode = { firstChild: null };
+        lingoBlend.decorate(fakeNode, cuesByTime[0][0]); // cue with annotations
+        lingoBlend.decorate(fakeNode, cuesByTime[2000][0]); // cue without annotations: no event
+        assert.strictEqual(shown.length, 1);
+        assert.strictEqual(shown[0].cueId, 'c0');
+        assert.strictEqual(shown[0].requestId, reqId);
+        assert.deepStrictEqual(shown[0].annotations, [{ source: 'mundo', target: 'mondo', lemma: 'mondo' }]);
+        lingoBlend.off('shown', onShown);
         lingoBlend.detach(owner);
         lingoBlend.setProvider(null);
     });
