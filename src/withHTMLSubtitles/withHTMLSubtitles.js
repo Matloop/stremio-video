@@ -11,6 +11,7 @@ var subtitleTypes = require('./subtitleTypes');
 var createASSRenderer = require('./assRenderer');
 var createCanvasASSRenderer = require('./canvasASSRenderer');
 var usesCanvasASS = require('./usesCanvasASS');
+var lingoBlend = require('./lingoBlend');
 
 const PREVIEW_INTERVAL = 300000;
 const NATIVE_ASS_TIMEOUT = 10000;
@@ -94,6 +95,8 @@ function withHTMLSubtitles(Video) {
         subtitlesElement.style.left = '0';
         subtitlesElement.style.zIndex = '1';
         subtitlesElement.style.textAlign = 'center';
+        // Let clicks fall through to the video; only LingoBlend words opt back in (pointer-events: auto).
+        subtitlesElement.style.pointerEvents = 'none';
         containerElement.style.position = 'relative';
         containerElement.style.zIndex = '0';
         containerElement.appendChild(subtitlesElement);
@@ -241,6 +244,10 @@ function withHTMLSubtitles(Video) {
             }
             return Math.max(videoState.time + (Date.now() - videoState.lastSyncAt) * videoState.playbackSpeed, videoState.minTime);
         }
+        function onLingoBlendChange() {
+            forceRender = true;
+            renderSubtitles();
+        }
         function startRenderLoop() {
             if (rafId !== null) {
                 return;
@@ -294,7 +301,9 @@ function withHTMLSubtitles(Video) {
 
             subtitlesElement.style.bottom = getEffectiveSubtitlesOffset(offset) + '%';
             subtitlesElement.style.opacity = opacity;
-            subtitlesRenderer.render(cuesByTime, timeIndex).forEach(function(cueNode) {
+            var cuesForTime = cuesByTime[cuesByTime.times[timeIndex]];
+            subtitlesRenderer.render(cuesByTime, timeIndex).forEach(function(cueNode, cueIndex) {
+                lingoBlend.decorate(cueNode, cuesForTime[cueIndex]);
                 cueNode.style.display = 'inline-block';
                 cueNode.style.padding = '0.2em';
                 cueNode.style.whiteSpace = 'pre-wrap';
@@ -613,6 +622,7 @@ function withHTMLSubtitles(Video) {
                     }
 
                     cuesByTime = result;
+                    lingoBlend.attach(onLingoBlendChange, result, { trackId: track.id, lang: track.lang });
                     startRenderLoop();
                     setPreview();
                     if (isWebkitDisplayingFullscreen() && nativeTextTrack === null) {
@@ -1135,6 +1145,7 @@ function withHTMLSubtitles(Video) {
                     }
                     var currentRequestId = ++selectionRequestId;
                     cuesByTime = null;
+                    lingoBlend.detach(onLingoBlendChange);
                     selectedTrackId = null;
                     selectedSubtitleText = null;
                     delay = null;
@@ -1401,6 +1412,7 @@ function withHTMLSubtitles(Video) {
                     stopRenderLoop();
                     lastTimeIndex = null;
                     cuesByTime = null;
+                    lingoBlend.detach(onLingoBlendChange);
                     tracks = [];
                     selectedTrackId = null;
                     selectedSubtitleText = null;
